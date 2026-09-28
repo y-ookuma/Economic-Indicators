@@ -3,3 +3,7 @@ __pycache__/
 .venv/
 .env
 .DS_Store
+
+# 個人情報（保有株）とローカルレポートは公開しない
+portfolio/holdings.json
+reports/

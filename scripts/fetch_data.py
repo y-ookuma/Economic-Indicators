@@ -18,6 +18,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import requests
 import yfinance as yf
@@ -31,15 +32,38 @@ MACRO_START = "2000-01-01"    # FRED の取得開始日
 FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv"
 
 
-def fetch_yfinance(ticker: str) -> pd.Series:
-    df = yf.download(ticker, period=MARKET_PERIOD, interval="1d",
+def remove_glitches(s: pd.Series, jump: float = 0.5, max_len: int = 5, tol: float = 0.1) -> pd.Series:
+    """Yahoo のデータに時々混じる「数日だけ桁がずれた値」を除く。
+
+    対数変化が ±jump を超えて跳び、max_len 営業日以内にほぼ同じ幅（誤差 tol）で
+    逆方向に戻る区間だけを異常値とみなす。実際の急騰・急落（戻らないもの）は残す。
+    """
+    s = s[s > 0]
+    r = np.log(s).diff().to_numpy()
+    drop = np.zeros(len(s), dtype=bool)
+    i = 1
+    while i < len(s):
+        if abs(r[i]) > jump:
+            for j in range(i + 1, min(i + 1 + max_len, len(s))):
+                if abs(r[i] + r[j]) < tol and abs(r[j]) > jump:
+                    drop[i:j] = True
+                    i = j
+                    break
+        i += 1
+    if drop.any():
+        print(f"     removed {drop.sum()} glitch point(s): {list(s.index[drop].strftime('%Y-%m-%d'))}")
+    return s[~drop]
+
+
+def fetch_yfinance(ticker: str, period: str = MARKET_PERIOD) -> pd.Series:
+    df = yf.download(ticker, period=period, interval="1d",
                      auto_adjust=False, progress=False, threads=False)
     if df.empty:
         raise ValueError(f"no data for {ticker}")
     close = df["Close"]
     if isinstance(close, pd.DataFrame):  # 新しい yfinance は MultiIndex 列を返す
         close = close.iloc[:, 0]
-    return close.dropna()
+    return remove_glitches(close.dropna())
 
 
 def fetch_fred(series_id: str) -> pd.Series:

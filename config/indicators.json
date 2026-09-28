@@ -2,8 +2,10 @@
   "_comment": "取得する指標の定義。source=yfinance は ticker、source=fred は FRED の series_id。transform: none / yoy(前年同月比%) / diff(前期差)。polarity: 1=上昇が好材料, -1=上昇が悪材料, 0=中立（前日比の色分けに使用）",
   "groups": [
     { "id": "jp_equity", "name": "日本株", "items": ["n225", "topix_etf"] },
+    { "id": "fx_rates", "name": "為替・金利", "items": ["usdjpy", "eurjpy", "jp10y", "us10y", "gold"] },
+    { "id": "commodity_energy", "name": "エネルギー先物（燃料・肥料コスト）", "items": ["wti", "brent", "heating_oil", "natgas"] },
+    { "id": "commodity_grain", "name": "穀物先物（CBOT）", "items": ["corn", "soybean", "wheat", "soymeal", "rice"] },
     { "id": "us_equity", "name": "米国株", "items": ["sp500", "nasdaq", "dow", "vix"] },
-    { "id": "fx_rates", "name": "為替・金利・商品", "items": ["usdjpy", "eurjpy", "us10y", "jp10y", "wti", "gold"] },
     { "id": "macro_us", "name": "米国マクロ", "items": ["us_cpi", "us_unrate", "us_ffr", "us_payrolls", "us_gdp", "us_t10y2y"] },
     { "id": "macro_jp", "name": "日本マクロ", "items": ["jp_cpi", "jp_unrate", "jp_callrate"] }
   ],
@@ -18,7 +20,15 @@
     "eurjpy":      { "name": "ユーロ円",          "source": "yfinance", "ticker": "EURJPY=X", "unit": "円",   "decimals": 2, "polarity": 0 },
     "us10y":       { "name": "米10年国債利回り",  "source": "yfinance", "ticker": "^TNX",     "unit": "%",    "decimals": 3, "polarity": 0 },
     "jp10y":       { "name": "日本10年国債利回り", "source": "fred",    "series_id": "IRLTLT01JPM156N", "unit": "%", "decimals": 3, "polarity": 0, "note": "月次（OECD）" },
-    "wti":         { "name": "WTI原油",           "source": "yfinance", "ticker": "CL=F",     "unit": "ドル", "decimals": 2, "polarity": 0 },
+    "wti":         { "name": "WTI原油",           "source": "yfinance", "ticker": "CL=F",     "unit": "ドル/bbl", "decimals": 2, "polarity": -1, "note": "上昇＝燃料コスト増（色分けは農業経営のコスト視点）" },
+    "brent":       { "name": "ブレント原油",      "source": "yfinance", "ticker": "BZ=F",     "unit": "ドル/bbl", "decimals": 2, "polarity": -1, "note": "国内石油製品価格の参照指標" },
+    "heating_oil": { "name": "暖房油（A重油の参考）", "source": "yfinance", "ticker": "HO=F", "unit": "ドル/gal", "decimals": 3, "polarity": -1, "note": "NY暖房油先物。施設園芸の暖房用 A重油 と連動しやすい" },
+    "natgas":      { "name": "天然ガス（窒素肥料の参考）", "source": "yfinance", "ticker": "NG=F", "unit": "ドル/MMBtu", "decimals": 3, "polarity": -1, "note": "尿素・アンモニアの原料コスト" },
+    "corn":        { "name": "トウモロコシ",      "source": "yfinance", "ticker": "ZC=F",     "unit": "セント/bu", "decimals": 2, "polarity": 0, "note": "飼料価格の指標" },
+    "soybean":     { "name": "大豆",              "source": "yfinance", "ticker": "ZS=F",     "unit": "セント/bu", "decimals": 2, "polarity": 0 },
+    "wheat":       { "name": "小麦",              "source": "yfinance", "ticker": "ZW=F",     "unit": "セント/bu", "decimals": 2, "polarity": 0 },
+    "soymeal":     { "name": "大豆ミール",        "source": "yfinance", "ticker": "ZM=F",     "unit": "ドル/st", "decimals": 1, "polarity": 0, "note": "飼料・有機質肥料原料" },
+    "rice":        { "name": "米（もみ米・米国産）", "source": "yfinance", "ticker": "ZR=F",  "unit": "ドル/cwt", "decimals": 3, "polarity": 0, "note": "参考値。国内米価とは連動しない" },
     "gold":        { "name": "金",                "source": "yfinance", "ticker": "GC=F",     "unit": "ドル", "decimals": 1, "polarity": 0 },
 
     "us_cpi":      { "name": "米CPI（前年比）",   "source": "fred", "series_id": "CPIAUCSL",        "transform": "yoy",  "unit": "%",   "decimals": 1, "polarity": -1 },

@@ -1,0 +1,8 @@
+{
+  "_comment": "ローカルレポートに最新動画タイトルを1行表示するチャンネル。channel_id は YouTube の UC から始まる ID（RSS: https://www.youtube.com/feeds/videos.xml?channel_id=...）",
+  "channels": [
+    { "name": "高橋ダン",               "channel_id": "UCFXl12dZUPs7MLy_dMkMZYw" },
+    { "name": "両学長 リベラルアーツ大学", "channel_id": "UC67Wr_9pA4I0glIxDt_Cpyw" },
+    { "name": "クニゼミ（クニカブ）",     "channel_id": "UCyTAiJtrpEw9NVMIODkC9jA" }
+  ]
+}

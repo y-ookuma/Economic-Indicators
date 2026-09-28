@@ -1,0 +1,9 @@
+{
+  "_comment": "このファイルを holdings.json という名前でコピーし、保有株を記入してください。holdings.json は .gitignore 済みで GitHub には送信されません。code=証券コード（東証は自動で .T を付与）、ticker を書けば米国株・ETF なども可。avg_cost=平均取得単価（円）",
+  "holdings": [
+    { "code": "6326", "name": "クボタ",       "shares": 100, "avg_cost": 2200, "memo": "農機" },
+    { "code": "7203", "name": "トヨタ自動車", "shares": 100, "avg_cost": 2800, "memo": "" },
+    { "code": "8306", "name": "三菱UFJ FG",   "shares": 200, "avg_cost": 1500, "memo": "金利上昇メリット" },
+    { "code": "1306", "name": "TOPIX連動ETF", "shares": 100, "avg_cost": 330 , "memo": "" }
+  ]
+}

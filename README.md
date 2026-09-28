@@ -22,6 +22,9 @@ GitHub Pages
 | `index.html`, `css/`, `js/` | ダッシュボード画面 |
 | `.github/workflows/update-data.yml` | 定期実行（JST 07:30 / 16:30、平日） |
 | `docs/EIM_design.md` | 経済影響モデル（EIM）の全体設計 |
+| `scripts/local_report.py`, `scripts/analysis.py` | **ローカル専用**：保有株・市場環境・先物・YouTuber のレポート作成 |
+| `portfolio/holdings.json` | **ローカル専用**：保有株（`.gitignore` 済み。サンプルは `holdings.example.json`） |
+| `config/youtubers.json` | レポートに最新動画を表示する YouTube チャンネル |
 
 ## 指標の追加方法
 
@@ -36,6 +39,22 @@ GitHub Pages
 
 - `transform`: `none`（そのまま）/ `yoy`（前年同期比 %）/ `diff`（前期差）
 - `polarity`: `1` 上昇が好材料、`-1` 上昇が悪材料、`0` 中立。前回比の色分けに使います
+
+## 保有株レポート（ローカル専用）
+
+1. `portfolio/holdings.example.json` をコピーして `portfolio/holdings.json` を作り、保有株を記入する
+2. `run_report.bat` をダブルクリック（または `python scripts/local_report.py --refresh`）
+3. `reports/report_YYYYMMDD.html` がブラウザで開く
+
+レポートの内容:
+- **市場環境**：日経平均のトレンド、VIX、ドル円、日本の金利
+- **銘柄ごとの分析**：株価と移動平均のグラフ、損益、RSI、日経β、為替感応度（日経平均の影響を除いた値）、環境スコア
+- **ポートフォリオ全体**：集中度、日経平均が10%下落した場合の影響額、円高への感応度
+- **農業関連の先物**：原油・暖房油（A重油の参考）・天然ガス（窒素肥料の参考）・穀物を、ドル建てと円換算で表示
+- **YouTuber**：`config/youtubers.json` のチャンネルの最新動画タイトル（RSS、加工なし）
+
+AI は使わず、すべての判定に根拠となる数値を表示します。閾値は `scripts/analysis.py` の先頭で変更できます。
+保有株の情報は外部に送信しません（株価の取得で Yahoo Finance に**証券コード**を問い合わせるだけです）。
 
 ## ローカルでの実行
 
