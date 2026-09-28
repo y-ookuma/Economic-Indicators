@@ -1,0 +1,35 @@
+{
+  "_comment": "取得する指標の定義。source=yfinance は ticker、source=fred は FRED の series_id。transform: none / yoy(前年同月比%) / diff(前期差)。polarity: 1=上昇が好材料, -1=上昇が悪材料, 0=中立（前日比の色分けに使用）",
+  "groups": [
+    { "id": "jp_equity", "name": "日本株", "items": ["n225", "topix_etf"] },
+    { "id": "us_equity", "name": "米国株", "items": ["sp500", "nasdaq", "dow", "vix"] },
+    { "id": "fx_rates", "name": "為替・金利・商品", "items": ["usdjpy", "eurjpy", "us10y", "jp10y", "wti", "gold"] },
+    { "id": "macro_us", "name": "米国マクロ", "items": ["us_cpi", "us_unrate", "us_ffr", "us_payrolls", "us_gdp", "us_t10y2y"] },
+    { "id": "macro_jp", "name": "日本マクロ", "items": ["jp_cpi", "jp_unrate", "jp_callrate"] }
+  ],
+  "indicators": {
+    "n225":        { "name": "日経平均",          "source": "yfinance", "ticker": "^N225",    "unit": "円",   "decimals": 0, "polarity": 1 },
+    "topix_etf":   { "name": "TOPIX連動ETF (1306)", "source": "yfinance", "ticker": "1306.T",   "unit": "円",   "decimals": 0, "polarity": 1, "note": "yfinanceでTOPIX指数が取得できないためETFで代替" },
+    "sp500":       { "name": "S&P 500",           "source": "yfinance", "ticker": "^GSPC",    "unit": "pt",   "decimals": 2, "polarity": 1 },
+    "nasdaq":      { "name": "NASDAQ総合",        "source": "yfinance", "ticker": "^IXIC",    "unit": "pt",   "decimals": 2, "polarity": 1 },
+    "dow":         { "name": "NYダウ",            "source": "yfinance", "ticker": "^DJI",     "unit": "ドル", "decimals": 2, "polarity": 1 },
+    "vix":         { "name": "VIX（恐怖指数）",   "source": "yfinance", "ticker": "^VIX",     "unit": "",     "decimals": 2, "polarity": -1 },
+    "usdjpy":      { "name": "ドル円",            "source": "yfinance", "ticker": "USDJPY=X", "unit": "円",   "decimals": 2, "polarity": 0 },
+    "eurjpy":      { "name": "ユーロ円",          "source": "yfinance", "ticker": "EURJPY=X", "unit": "円",   "decimals": 2, "polarity": 0 },
+    "us10y":       { "name": "米10年国債利回り",  "source": "yfinance", "ticker": "^TNX",     "unit": "%",    "decimals": 3, "polarity": 0 },
+    "jp10y":       { "name": "日本10年国債利回り", "source": "fred",    "series_id": "IRLTLT01JPM156N", "unit": "%", "decimals": 3, "polarity": 0, "note": "月次（OECD）" },
+    "wti":         { "name": "WTI原油",           "source": "yfinance", "ticker": "CL=F",     "unit": "ドル", "decimals": 2, "polarity": 0 },
+    "gold":        { "name": "金",                "source": "yfinance", "ticker": "GC=F",     "unit": "ドル", "decimals": 1, "polarity": 0 },
+
+    "us_cpi":      { "name": "米CPI（前年比）",   "source": "fred", "series_id": "CPIAUCSL",        "transform": "yoy",  "unit": "%",   "decimals": 1, "polarity": -1 },
+    "us_unrate":   { "name": "米失業率",          "source": "fred", "series_id": "UNRATE",          "unit": "%",   "decimals": 1, "polarity": -1 },
+    "us_ffr":      { "name": "FF金利（実効）",    "source": "fred", "series_id": "FEDFUNDS",        "unit": "%",   "decimals": 2, "polarity": 0 },
+    "us_payrolls": { "name": "米非農業部門雇用者数（前月差）", "source": "fred", "series_id": "PAYEMS", "transform": "diff", "unit": "千人", "decimals": 0, "polarity": 1 },
+    "us_gdp":      { "name": "米実質GDP成長率（年率）", "source": "fred", "series_id": "A191RL1Q225SBEA", "unit": "%", "decimals": 1, "polarity": 1, "note": "四半期" },
+    "us_t10y2y":   { "name": "米長短金利差（10年-2年）", "source": "fred", "series_id": "T10Y2Y",   "unit": "%",   "decimals": 2, "polarity": 0, "note": "マイナス＝逆イールド" },
+
+    "jp_cpi":      { "name": "日本CPI（前年比）", "source": "fred", "series_id": "FPCPITOTLZGJPN", "unit": "%", "decimals": 1, "polarity": -1, "note": "年次（世界銀行）。月次は e-Stat 対応予定" },
+    "jp_unrate":   { "name": "日本失業率",        "source": "fred", "series_id": "LRUN64TTJPM156S", "unit": "%",   "decimals": 1, "polarity": -1 },
+    "jp_callrate": { "name": "日本コールレート",  "source": "fred", "series_id": "IRSTCI01JPM156N", "unit": "%",   "decimals": 3, "polarity": 0 }
+  }
+}

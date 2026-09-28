@@ -1,0 +1,42 @@
+name: Update data
+
+on:
+  schedule:
+    - cron: "30 22 * * 1-5"   # JST 07:30（火〜土）米国市場の引け後
+    - cron: "30 7 * * 1-5"    # JST 16:30（月〜金）東京市場の引け後
+  workflow_dispatch:           # Actions 画面から手動実行も可
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Fetch data
+        run: python scripts/fetch_data.py
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/indicators.json
+          if git diff --cached --quiet; then
+            echo "no changes"
+          else
+            git commit -m "data: update $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi

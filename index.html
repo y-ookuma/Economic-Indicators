@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Economic Indicators</title>
+  <meta name="description" content="日米の株価・為替・金利・マクロ経済指標ダッシュボード">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+  <script src="js/app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div>
+      <h1>Economic Indicators</h1>
+      <p class="updated" id="updated">データ読み込み中…</p>
+    </div>
+    <button type="button" class="theme-toggle" id="themeToggle" aria-label="表示テーマを切り替え">◐</button>
+  </header>
+
+  <main>
+    <section class="detail" id="detail" aria-live="polite">
+      <div class="detail-head">
+        <div>
+          <h2 id="detailTitle">—</h2>
+          <p class="detail-meta" id="detailMeta"></p>
+        </div>
+        <div class="ranges" role="group" aria-label="表示期間">
+          <button type="button" data-range="30">1M</button>
+          <button type="button" data-range="90">3M</button>
+          <button type="button" data-range="365" class="active">1Y</button>
+          <button type="button" data-range="1825">5Y</button>
+          <button type="button" data-range="0">全期間</button>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="detailChart" aria-label="選択中の指標の推移グラフ" role="img"></canvas></div>
+      <details class="table-view">
+        <summary>表で見る（直近20件）</summary>
+        <table id="detailTable"><thead><tr><th>日付</th><th>値</th></tr></thead><tbody></tbody></table>
+      </details>
+    </section>
+
+    <div id="groups"></div>
+
+    <p class="errors" id="errors" hidden></p>
+  </main>
+
+  <footer class="site-footer">
+    データ出典: Yahoo Finance（yfinance）, FRED（Federal Reserve Bank of St. Louis）, World Bank。
+    投資判断は自己責任でお願いします。
+  </footer>
+</body>
+</html>
