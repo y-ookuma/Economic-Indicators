@@ -14,7 +14,9 @@ from __future__ import annotations
 import io
 import json
 import math
+import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -30,6 +32,8 @@ OUTPUT_PATH = ROOT / "data" / "indicators.json"
 MARKET_PERIOD = "5y"          # yfinance の取得期間
 MACRO_START = "2000-01-01"    # FRED の取得開始日
 FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv"
+FRED_API_URL = "https://api.stlouisfed.org/fred/series/observations"
+FRED_API_KEY = os.environ.get("FRED_API_KEY", "")
 
 
 def remove_glitches(s: pd.Series, jump: float = 0.5, max_len: int = 5, tol: float = 0.1) -> pd.Series:
@@ -66,10 +70,29 @@ def fetch_yfinance(ticker: str, period: str = MARKET_PERIOD) -> pd.Series:
     return remove_glitches(close.dropna())
 
 
+def http_get(url: str, params: dict, tries: int = 3) -> requests.Response:
+    for i in range(tries):
+        try:
+            resp = requests.get(url, params=params, timeout=(10, 60),
+                                headers={"User-Agent": "Economic-Indicators/1.0"})
+            resp.raise_for_status()
+            return resp
+        except requests.RequestException:
+            if i == tries - 1:
+                raise
+            time.sleep(5 * (i + 1))
+
+
 def fetch_fred(series_id: str) -> pd.Series:
-    resp = requests.get(FRED_CSV_URL, params={"id": series_id, "cosd": MACRO_START},
-                        timeout=30, headers={"User-Agent": "Economic-Indicators/1.0"})
-    resp.raise_for_status()
+    # 公式 API（要キー）は GitHub Actions からも安定。キーが無ければ公開 CSV を使う
+    if FRED_API_KEY:
+        obs = http_get(FRED_API_URL, {"series_id": series_id, "api_key": FRED_API_KEY,
+                                      "file_type": "json", "observation_start": MACRO_START}
+                       ).json()["observations"]
+        s = pd.Series(pd.to_numeric([o["value"] for o in obs], errors="coerce"),
+                      index=pd.to_datetime([o["date"] for o in obs]))
+        return s.dropna()
+    resp = http_get(FRED_CSV_URL, {"id": series_id, "cosd": MACRO_START})
     df = pd.read_csv(io.StringIO(resp.text))
     date_col, value_col = df.columns[0], df.columns[1]
     s = pd.Series(pd.to_numeric(df[value_col], errors="coerce").values,

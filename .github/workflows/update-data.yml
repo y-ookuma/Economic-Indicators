@@ -27,6 +27,8 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Fetch data
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}   # 未設定なら公開 CSV を使う
         run: python scripts/fetch_data.py
 
       - name: Commit if changed
