@@ -1,0 +1,67 @@
+name: Build data and deploy
+
+# データ（data/*.json）はコミットせず、ここで生成して GitHub Pages に直接配置する
+on:
+  schedule:
+    - cron: "30 22 * * 1-5"   # JST 07:30（火〜土）米国市場の引け後
+    - cron: "30 7 * * 1-5"    # JST 16:30（月〜金）東京市場の引け後
+  push:
+    branches: [main]           # コードの変更もすぐ反映する
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - id: pages
+        uses: actions/configure-pages@v5
+
+      # 取得に失敗した指標は前回の値を使うため、公開中のデータを引き継ぐ
+      - name: Restore previously published data
+        run: |
+          mkdir -p data
+          for f in indicators stocks analysis; do
+            curl -fsSL "${{ steps.pages.outputs.base_url }}/data/$f.json" -o "data/$f.json" || rm -f "data/$f.json"
+          done
+          ls -la data
+
+      - name: Fetch indicators
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}   # 未設定なら公開 CSV を使う
+        run: python scripts/fetch_data.py
+
+      - name: Build analysis (Nikkei 225 + watchlist, futures, YouTube)
+        run: python scripts/build_analysis.py
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

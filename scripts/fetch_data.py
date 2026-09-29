@@ -83,8 +83,27 @@ def http_get(url: str, params: dict, tries: int = 3) -> requests.Response:
             time.sleep(5 * (i + 1))
 
 
+class SourceDown(Exception):
+    """同じデータ源への以降の問い合わせを省略する（タイムアウト待ちの積み重ねを防ぐ）"""
+
+
+_fred_down = False
+
+
 def fetch_fred(series_id: str) -> pd.Series:
-    # 公式 API（要キー）は GitHub Actions からも安定。キーが無ければ公開 CSV を使う
+    global _fred_down
+    if _fred_down:
+        raise SourceDown("FRED が応答しないため省略")
+    try:
+        return _fetch_fred(series_id)
+    except requests.Timeout:
+        _fred_down = True
+        raise
+
+
+def _fetch_fred(series_id: str) -> pd.Series:
+    # 公式 API（要キー）は GitHub Actions からも安定。
+    # キーが無ければ公開 CSV を使う（GitHub Actions からは応答しないことがある）
     if FRED_API_KEY:
         obs = http_get(FRED_API_URL, {"series_id": series_id, "api_key": FRED_API_KEY,
                                       "file_type": "json", "observation_start": MACRO_START}
@@ -92,7 +111,7 @@ def fetch_fred(series_id: str) -> pd.Series:
         s = pd.Series(pd.to_numeric([o["value"] for o in obs], errors="coerce"),
                       index=pd.to_datetime([o["date"] for o in obs]))
         return s.dropna()
-    resp = http_get(FRED_CSV_URL, {"id": series_id, "cosd": MACRO_START})
+    resp = http_get(FRED_CSV_URL, {"id": series_id, "cosd": MACRO_START}, tries=1)
     df = pd.read_csv(io.StringIO(resp.text))
     date_col, value_col = df.columns[0], df.columns[1]
     s = pd.Series(pd.to_numeric(df[value_col], errors="coerce").values,

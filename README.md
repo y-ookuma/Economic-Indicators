@@ -1,30 +1,53 @@
 # Economic Indicators
 
-日米の株価・為替・金利・マクロ経済指標を一覧できるダッシュボードです。
-GitHub Actions が定期的にデータを取得し、GitHub Pages で表示します。
+日本株中心の市場ダッシュボード、保有株レポート、農業関連の先物、投資系 YouTuber の最新動画を、1つの Web アプリで見られます。
+データは GitHub Actions が平日2回取得・分析し、GitHub Pages に配置します。
 
 **公開ページ:** https://y-ookuma.github.io/Economic-Indicators/
+
+## タブ
+
+| タブ | 内容 |
+|---|---|
+| 市場 | 日本株・為替・金利・エネルギー／穀物先物・米国株・マクロ指標の最新値と推移 |
+| 保有株レポート | 保有株 JSON を**ブラウザで読み込み**、損益・比率・トレンド・日経β・為替感応度・環境スコアを表示。「サマリー／銘柄別分析／銘柄を探す／判定ルール」に分かれる |
+| 農業・先物 | 原油・暖房油（A重油の参考）・天然ガス（窒素肥料の参考）・穀物を、ドル建てと円換算で比較 |
+| YouTuber | 登録チャンネルの最新動画タイトル（RSS、加工なし） |
+
+## 保有株レポートの使い方
+
+1. 「保有株レポート」タブで「ひな形をダウンロード」し、保有株を記入して `holdings.json` として保存する
+2. ファイルをドラッグ＆ドロップ（または「ファイルを選ぶ」）
+3. 「この端末のブラウザに保存する」にチェックしておくと、次回から自動で表示される
+
+```json
+{ "holdings": [ { "code": "7203", "name": "トヨタ自動車", "shares": 100, "avg_cost": 2800, "memo": "" } ] }
+```
+
+**プライバシー:** 保有 JSON はブラウザの中だけで処理され、送信されません。分析対象は日経225の全採用銘柄（＋ウォッチリスト）なので、公開データからどの銘柄を保有しているかは分かりません。
+日経225以外の銘柄（ETF・中小型株など）は `config/watchlist.json` に追加してください。ここに書いた証券コードは公開されます（株数・取得単価は公開されません）。
 
 ## 構成
 
 ```
-GitHub Actions（平日2回）
-  └─ scripts/fetch_data.py ── yfinance / FRED ──▶ data/indicators.json（コミット）
-GitHub Pages
-  └─ index.html + js/app.js ── data/indicators.json を読んで表示
+GitHub Actions（平日 JST 07:30 / 16:30、main への push 時）
+  ├─ 公開中の data/*.json を取得（取得失敗時に前回値を使うため）
+  ├─ scripts/fetch_data.py     … yfinance / FRED → data/indicators.json
+  ├─ scripts/build_analysis.py … data/analysis.json（市場環境・先物・YouTuber）
+  │                               data/stocks.json（日経225＋ウォッチリストの銘柄分析）
+  └─ GitHub Pages に配置（データはコミットしない）
+ブラウザ
+  └─ index.html + js/*.js … data/*.json と、読み込んだ保有 JSON を突き合わせて表示
 ```
 
 | パス | 役割 |
 |---|---|
-| `config/indicators.json` | 取得する指標の定義。**指標の追加・削除はここだけ編集すればよい** |
-| `scripts/fetch_data.py` | データを取得して `data/indicators.json` を生成する |
-| `data/indicators.json` | 生成されたデータ（Actions が自動で更新） |
-| `index.html`, `css/`, `js/` | ダッシュボード画面 |
-| `.github/workflows/update-data.yml` | 定期実行（JST 07:30 / 16:30、平日） |
+| `config/indicators.json` | 市場タブの指標の定義。**指標の追加・削除はここだけ編集すればよい** |
+| `config/watchlist.json` | 日経225以外に分析する銘柄 |
+| `config/youtubers.json` | YouTuber タブのチャンネル |
+| `scripts/analysis.py` | 判定ルールと閾値（銘柄・市場環境・先物） |
+| `js/report.js` | 保有株レポート。ポートフォリオの判定の閾値は先頭の定数 |
 | `docs/EIM_design.md` | 経済影響モデル（EIM）の全体設計 |
-| `scripts/local_report.py`, `scripts/analysis.py` | **ローカル専用**：保有株・市場環境・先物・YouTuber のレポート作成 |
-| `portfolio/holdings.json` | **ローカル専用**：保有株（`.gitignore` 済み。サンプルは `holdings.example.json`） |
-| `config/youtubers.json` | レポートに最新動画を表示する YouTube チャンネル |
 
 ## 指標の追加方法
 
@@ -40,32 +63,27 @@ GitHub Pages
 - `transform`: `none`（そのまま）/ `yoy`（前年同期比 %）/ `diff`（前期差）
 - `polarity`: `1` 上昇が好材料、`-1` 上昇が悪材料、`0` 中立。前回比の色分けに使います
 
-## 保有株レポート（ローカル専用）
+## FRED API キー（推奨）
 
-1. `portfolio/holdings.example.json` をコピーして `portfolio/holdings.json` を作り、保有株を記入する
-2. `run_report.bat` をダブルクリック（または `python scripts/local_report.py --refresh`）
-3. `reports/report_YYYYMMDD.html` がブラウザで開く
+FRED の公開 CSV は GitHub Actions からの接続に応答しないことがあります。無料の API キーを設定すると安定します。
 
-レポートの内容:
-- **市場環境**：日経平均のトレンド、VIX、ドル円、日本の金利
-- **銘柄ごとの分析**：株価と移動平均のグラフ、損益、RSI、日経β、為替感応度（日経平均の影響を除いた値）、環境スコア
-- **ポートフォリオ全体**：集中度、日経平均が10%下落した場合の影響額、円高への感応度
-- **農業関連の先物**：原油・暖房油（A重油の参考）・天然ガス（窒素肥料の参考）・穀物を、ドル建てと円換算で表示
-- **YouTuber**：`config/youtubers.json` のチャンネルの最新動画タイトル（RSS、加工なし）
-
-AI は使わず、すべての判定に根拠となる数値を表示します。閾値は `scripts/analysis.py` の先頭で変更できます。
-保有株の情報は外部に送信しません（株価の取得で Yahoo Finance に**証券コード**を問い合わせるだけです）。
+1. https://fred.stlouisfed.org/docs/api/api_key.html でキーを取得
+2. リポジトリの Settings → Secrets and variables → Actions → New repository secret で `FRED_API_KEY` を登録
 
 ## ローカルでの実行
 
 ```bash
 pip install -r requirements.txt
 python scripts/fetch_data.py
+python scripts/build_analysis.py
 python -m http.server 8000     # → http://localhost:8000
 ```
 
 ## 注意
 
-- yfinance は Yahoo Finance の非公式APIです。仕様変更で取得できなくなることがあるため、`requirements.txt` は定期的に更新してください。取得に失敗した指標は前回のデータを残し、「⚠ 未更新」と表示します。
+- 表示内容は公開データから機械的に計算した状態の整理であり、将来の価格の予測や売買の推奨ではありません。環境スコアとその後のリターンの関係はまだ検証していません。
+- yfinance は Yahoo Finance の非公式 API です。仕様変更で取得できなくなることがあるため、`requirements.txt` は定期的に更新してください。
+- Yahoo のデータに時々混じる「数日だけ桁がずれた値」は自動で除去します（`remove_glitches`）。
 - TOPIX は yfinance で取得できないため、連動ETF（1306.T）で代替しています。
 - 日本CPI は FRED の月次系列の配信が終了したため、暫定で世界銀行の年次系列を使っています（e-Stat API に移行予定）。
+- 日経225の構成銘柄は日経公式の CSV から銘柄コード・社名・業種のみ使用しています（ウエートは公開データに含めません）。

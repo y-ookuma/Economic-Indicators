@@ -1,13 +1,15 @@
-"""保有株・市場環境・先物の数値分析と、ルールベースの判定。
+"""市場環境・先物・個別銘柄の数値分析と、ルールベースの判定。
 
 AI は使わず、すべての判定に根拠となる数値を添える。
 判定は「現在の状態の整理」であり、将来の価格を予測するものではない。
-閾値は下の定数で調整できる。
+保有情報（株数・取得単価）には依存しない。損益・比率・ポートフォリオ全体の判定は
+ブラウザ側（js/report.js）で、読み込んだ保有 JSON から計算する。
+閾値は下の定数で調整できる（THRESHOLDS として data/analysis.json にも出力し、画面に表示する）。
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -17,11 +19,15 @@ RSI_HOT, RSI_COLD = 70, 30
 DEV25_HOT, DEV25_COLD = 0.10, -0.10     # 25日線からの乖離率
 DRAWDOWN_ALERT = -0.20                  # 52週高値からの下落率
 BETA_HIGH = 1.2
-WEIGHT_ALERT = 0.30                     # 1銘柄の比率
-LOSS_ALERT = -0.20                      # 含み損率
 T_SIGNIFICANT = 2.0                     # 感応度の |t値| がこれ以上なら有意とみなす
 VIX_CALM, VIX_STRESS = 15, 25
 LOOKBACK_1Y = 245                       # 1年 ≒ 245 営業日（東証）
+
+THRESHOLDS = {
+    "rsi_hot": RSI_HOT, "rsi_cold": RSI_COLD, "dev25_hot": DEV25_HOT, "dev25_cold": DEV25_COLD,
+    "drawdown_alert": DRAWDOWN_ALERT, "beta_high": BETA_HIGH, "t_significant": T_SIGNIFICANT,
+    "vix_calm": VIX_CALM, "vix_stress": VIX_STRESS,
+}
 
 
 @dataclass
@@ -31,22 +37,8 @@ class Finding:
     evidence: str = ""
 
 
-@dataclass
-class HoldingResult:
-    code: str
-    name: str
-    ticker: str
-    shares: float
-    avg_cost: float
-    memo: str
-    price: float = float("nan")
-    date: str = ""
-    metrics: dict = field(default_factory=dict)
-    findings: list[Finding] = field(default_factory=list)
-    score: int = 0
-    score_parts: list[str] = field(default_factory=list)
-    history: pd.DataFrame | None = None   # close, ma25, ma75
-    error: str = ""
+def findings_json(items: list[Finding]) -> list[dict]:
+    return [asdict(f) for f in items]
 
 
 # ---------- 基本計算 ----------
@@ -112,6 +104,7 @@ def log_returns(s: pd.Series) -> pd.Series:
 
 # ---------- 市場環境 ----------
 TREND_JA = {"up": "上昇トレンド", "down": "下降トレンド", "flat": "もみ合い・転換局面"}
+TREND_PT = {"up": 1, "down": -1, "flat": 0}
 
 
 def market_environment(series: dict) -> tuple[list[Finding], dict]:
@@ -138,7 +131,7 @@ def market_environment(series: dict) -> tuple[list[Finding], dict]:
 
     jp10 = to_series(series["jp10y"]["history"])
     d = jp10.iloc[-1] - jp10[jp10.index <= jp10.index[-1] - pd.Timedelta(days=180)].iloc[-1]
-    ctx["jp10y_6m"] = d
+    ctx["jp10y_6m"] = float(d)
     out.append(Finding("info", f"日本10年金利は半年で {d:+.2f}pt（{jp10.iloc[-1]:.2f}%）",
                        "金利上昇は銀行・保険に追い風、不動産・高PER成長株に逆風となりやすい"))
 
@@ -163,9 +156,8 @@ def commodities(series: dict) -> list[dict]:
         s = to_series(series[k]["history"])
         yen = (s * fx.reindex(s.index, method="ffill")).dropna()
         row = {"key": k, "name": series[k]["name"], "unit": series[k]["unit"],
-               "note": series[k].get("note", ""), "price": s.iloc[-1],
-               "date": s.index[-1].strftime("%Y-%m-%d"), "decimals": series[k]["decimals"],
-               "spark": s.iloc[-120:].tolist()}
+               "note": series[k].get("note", ""), "price": float(s.iloc[-1]),
+               "date": s.index[-1].strftime("%Y-%m-%d"), "decimals": series[k]["decimals"]}
         for label, days in (("1m", 30), ("3m", 91), ("1y", 365)):
             row[f"usd_{label}"] = ret_days(s, days)
             row[f"yen_{label}"] = ret_days(yen, days)
@@ -189,28 +181,22 @@ def commodity_findings(rows: list[dict], month: int) -> list[Finding]:
                            "尿素などの輸入肥料価格には数か月遅れて波及しやすい"))
     grains = [by[k] for k in ("corn", "soybean", "wheat", "soymeal") if k in by]
     if grains:
-        avg = np.mean([g["yen_3m"] for g in grains])
+        avg = float(np.mean([g["yen_3m"] for g in grains]))
         out.append(Finding("caution" if avg > 0.10 else "info",
                            f"穀物4品目の円換算3か月変化は平均 {avg:+.1%}",
                            "、".join(f"{g['name']} {g['yen_3m']:+.1%}" for g in grains)))
     return out
 
 
-# ---------- 保有株 ----------
-def analyze_holding(h: HoldingResult, close: pd.Series, n225: pd.Series, usdjpy: pd.Series,
-                    ctx: dict) -> None:
+# ---------- 個別銘柄 ----------
+def analyze_stock(close: pd.Series, n225: pd.Series, usdjpy: pd.Series, ctx: dict) -> dict:
+    """1銘柄の指標・判定・環境スコアを返す（保有情報に依存しない部分）"""
     close = close.dropna()
     close.index = close.index.tz_localize(None) if close.index.tz is not None else close.index
     p = float(close.iloc[-1])
-    h.price, h.date = p, close.index[-1].strftime("%Y-%m-%d")
-
     ma25, ma75 = close.rolling(25).mean(), close.rolling(75).mean()
-    h.history = pd.DataFrame({"close": close, "ma25": ma25, "ma75": ma75}).iloc[-LOOKBACK_1Y:]
 
-    m = h.metrics
-    m["value"] = p * h.shares
-    m["pnl"] = (p - h.avg_cost) * h.shares
-    m["pnl_pct"] = p / h.avg_cost - 1 if h.avg_cost else float("nan")
+    m: dict = {}
     m["ret_1m"], m["ret_3m"], m["ret_1y"] = ret(close, 21), ret(close, 63), ret(close, LOOKBACK_1Y)
     m["rsi"] = rsi(close)
     m["dev25"] = p / ma25.iloc[-1] - 1
@@ -219,23 +205,23 @@ def analyze_holding(h: HoldingResult, close: pd.Series, n225: pd.Series, usdjpy:
     m["vol"] = float(lr.std() * np.sqrt(245))
 
     # 日経平均・ドル円への感応度（1年、日次対数収益率の重回帰）
-    # 日本株は前日の米国市場の影響を受けるため、ドル円は東京時間の終値とほぼ同時点の値を使う
     reg = regress(lr, {"n225": log_returns(n225), "usdjpy": log_returns(usdjpy)})
-    m["beta"], m["beta_t"] = reg.get("n225", (float("nan"), 0))
-    m["fx_beta"], m["fx_t"] = reg.get("usdjpy", (float("nan"), 0))
+    m["beta"], m["beta_t"] = reg.get("n225", (float("nan"), 0.0))
+    m["fx_beta"], m["fx_t"] = reg.get("usdjpy", (float("nan"), 0.0))
     m["rel_3m"] = m["ret_3m"] - ret(n225, 63)
 
-    f, parts = h.findings, h.score_parts
-    score = 0
+    f: list[Finding] = []
+    parts: list[str] = []
+    fmt_pt = {1: "+1", -1: "-1", 0: "±0"}
 
     t, ev = trend(close)
     f.append(Finding("good" if t == "up" else "caution" if t == "down" else "info", TREND_JA[t], ev))
-    score += {"up": 1, "down": -1, "flat": 0}[t]
-    parts.append(f"トレンド {({'up': '+1', 'down': '-1', 'flat': '±0'})[t]}")
+    score = TREND_PT[t]
+    parts.append(f"トレンド {fmt_pt[TREND_PT[t]]}")
 
     mk = ctx["n225_trend"]
-    score += {"up": 1, "down": -1, "flat": 0}[mk]
-    parts.append(f"市場(日経) {({'up': '+1', 'down': '-1', 'flat': '±0'})[mk]}")
+    score += TREND_PT[mk]
+    parts.append(f"市場(日経) {fmt_pt[TREND_PT[mk]]}")
 
     # 25日線と75日線のクロス（直近10営業日）
     diff = (ma25 - ma75).dropna().iloc[-11:]
@@ -270,32 +256,5 @@ def analyze_holding(h: HoldingResult, close: pd.Series, n225: pd.Series, usdjpy:
         score += 1 if tail else -1
         parts.append(f"為替 {'+1' if tail else '-1'}")
 
-    if m["pnl_pct"] <= LOSS_ALERT:
-        f.append(Finding("caution", f"含み損 {m['pnl_pct']:.0%}：購入時の理由が今も成り立つか再確認を"))
-
-    h.score = score
-
-
-def portfolio_findings(results: list[HoldingResult]) -> list[Finding]:
-    ok = [r for r in results if not r.error]
-    total = sum(r.metrics["value"] for r in ok)
-    out = []
-    if not total:
-        return out
-    for r in ok:
-        r.metrics["weight"] = r.metrics["value"] / total
-        if r.metrics["weight"] >= WEIGHT_ALERT:
-            out.append(Finding("caution", f"{r.name} が評価額の {r.metrics['weight']:.0%} を占める（集中）",
-                               f"{WEIGHT_ALERT:.0%} 以上で表示"))
-    betas = [(r.metrics["beta"], r.metrics["weight"]) for r in ok if not np.isnan(r.metrics["beta"])]
-    if betas:
-        pb = sum(b * w for b, w in betas) / sum(w for _, w in betas)
-        out.append(Finding("info", f"ポートフォリオ全体の日経平均β ≒ {pb:.2f}",
-                           f"日経平均が 10% 下落すると、評価額は単純計算で約 {pb * 10:.0f}%（{total * pb * 0.10:,.0f} 円）減る"))
-    fx = [(r.metrics["fx_beta"], r.metrics["weight"]) for r in ok
-          if abs(r.metrics["fx_t"]) >= T_SIGNIFICANT]
-    if fx:
-        pf = sum(b * w for b, w in fx)
-        out.append(Finding("info", f"為替感応度が有意な銘柄の合計寄与 {pf:+.2f}",
-                           f"ドル円が 5% 円高になると、評価額は約 {-pf * 5:+.1f}% 変わる（日経平均一定の場合）"))
-    return out
+    return {"price": p, "date": close.index[-1].strftime("%Y-%m-%d"), "metrics": m,
+            "findings": findings_json(f), "score": score, "score_parts": parts}
