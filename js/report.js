@@ -106,7 +106,7 @@ function portfolioFindings({ ok, total }) {
   const fx = ok.filter(r => Math.abs(r.s.metrics.fx_t ?? 0) >= t.t_significant);
   if (fx.length) {
     const pf = fx.reduce((a, r) => a + r.s.metrics.fx_beta * r.weight, 0);
-    out.push({ level: 'info', text: `為替感応度が有意な銘柄の合計寄与 ${signed(pf, 2)}`,
+    if (Math.abs(pf) >= 0.01) out.push({ level: 'info', text: `為替感応度が有意な銘柄の合計寄与 ${signed(pf, 2)}`,
       evidence: `ドル円が 5% 円高になると、評価額は約 ${signed(-pf * 5, 1)}% 変わる（日経平均一定の場合）` });
   }
   return out;
@@ -146,7 +146,7 @@ function summaryHtml(p) {
       <span class="bar"><span style="width:${(x.weight * 100).toFixed(1)}%"></span></span>
       <span class="bar-value">${share(x.weight)}</span></div>`).join('');
   const missingHtml = missing.length ? `<p class="banner">分析データがない銘柄: ${missing.map(r => esc(r.code)).join(', ')}。
-    日経225採用銘柄以外は <code>config/watchlist.json</code> に追加してください（次回の自動更新から分析されます）。</p>` : '';
+    東証プライム・ETF 以外の銘柄は <code>config/watchlist.json</code> に追加してください（次回の自動更新から分析されます）。</p>` : '';
 
   return `
     ${missingHtml}
@@ -199,13 +199,27 @@ function stockCard(code, s, h) {
     </article>`;
 }
 
+const priceCache = new Map();
+const loadPrices = code => {
+  if (!priceCache.has(code)) priceCache.set(code, loadJson(`data/prices/${encodeURIComponent(code)}.json`));
+  return priceCache.get(code);
+};
+
+// 株価は銘柄ごとのファイル（data/prices/{code}.json）を表示する分だけ取得する
 function drawCardCharts(root, costs = {}) {
-  root.querySelectorAll('canvas[data-code]').forEach(cv => {
+  root.querySelectorAll('canvas[data-code]').forEach(async cv => {
     const code = cv.dataset.code;
-    const s = STOCKS.stocks[code];
+    let raw;
+    try {
+      raw = await loadPrices(code);
+    } catch (e) {
+      cv.parentElement.innerHTML = `<p class="errors">株価データを読み込めませんでした（${esc(e.message)}）</p>`;
+      return;
+    }
+    if (!cv.isConnected) return;   // 読み込み中に画面が切り替わった
     // 休場などの欠損は直前の値で埋めてから移動平均を計算する
     let last = null;
-    const close = s.close.map(v => (v == null ? last : (last = v)));
+    const close = raw.map(v => (v == null ? last : (last = v)));
     const ma25 = movingAverage(close, 25), ma75 = movingAverage(close, 75);
     const from = Math.max(0, close.length - CHART_DAYS);
     const labels = STOCKS.dates.slice(from);
@@ -245,7 +259,7 @@ function searchHtml() {
     .map(([c, s]) => `<option value="${esc(c)} ${esc(s.name)}"></option>`).join('');
   return `
     <section class="panel">
-      <label for="stockSearch">証券コードまたは社名（日経225採用銘柄＋ウォッチリスト、${Object.keys(STOCKS.stocks).length}銘柄）</label>
+      <label for="stockSearch">証券コードまたは銘柄名（${Object.keys(STOCKS.stocks).length.toLocaleString()}銘柄）</label>
       <input id="stockSearch" list="stockList" placeholder="例: 7203 / トヨタ" autocomplete="off">
       <datalist id="stockList">${opts}</datalist>
       <p class="sub">${esc(STOCKS.universe_source)}。保有していない銘柄の状態確認に使えます。</p>
